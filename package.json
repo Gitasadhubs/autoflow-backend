@@ -10,10 +10,11 @@
     "dev": "tsx watch index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:migrate-railway": "node migrate-railway.js",
+    "postinstall": "npm run build"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.0.1",
     "@octokit/rest": "^22.0.0",
     "drizzle-orm": "^0.36.4",
     "drizzle-zod": "^0.5.1",
@@ -28,9 +29,8 @@
     "zod": "^3.24.1",
     "zod-validation-error": "^3.4.0",
     "connect-pg-simple": "^10.0.0",
-    "ws": "^8.18.0",
-    "dotenv": "^16.4.5",
-    "pg": "^8.13.0"
+    "postgres": "^3.4.4",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

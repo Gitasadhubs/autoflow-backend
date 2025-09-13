@@ -102,7 +102,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProject(id: number): Promise<boolean> {
     const result = await db.delete(projects).where(eq(projects.id, id));
-    return result.rowCount ? result.rowCount > 0 : false;
+    return result.length > 0;
   }
 
   // Deployment methods

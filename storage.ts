@@ -55,7 +55,7 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db
       .insert(users)
-      .values(insertUser)
+      .values(insertUser as any)
       .returning();
     return user;
   }
@@ -63,7 +63,7 @@ export class DatabaseStorage implements IStorage {
   async updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined> {
     const [user] = await db
       .update(users)
-      .set(updates)
+      .set(updates as any)
       .where(eq(users.id, id))
       .returning();
     return user || undefined;
@@ -86,7 +86,7 @@ export class DatabaseStorage implements IStorage {
   async createProject(insertProject: InsertProject): Promise<Project> {
     const [project] = await db
       .insert(projects)
-      .values(insertProject)
+      .values(insertProject as any)
       .returning();
     return project;
   }
@@ -94,7 +94,7 @@ export class DatabaseStorage implements IStorage {
   async updateProject(id: number, updates: Partial<InsertProject>): Promise<Project | undefined> {
     const [project] = await db
       .update(projects)
-      .set(updates)
+      .set(updates as any)
       .where(eq(projects.id, id))
       .returning();
     return project || undefined;
@@ -122,7 +122,7 @@ export class DatabaseStorage implements IStorage {
   async createDeployment(insertDeployment: InsertDeployment): Promise<Deployment> {
     const [deployment] = await db
       .insert(deployments)
-      .values(insertDeployment)
+      .values(insertDeployment as any)
       .returning();
     return deployment;
   }
@@ -130,7 +130,7 @@ export class DatabaseStorage implements IStorage {
   async updateDeployment(id: number, updates: Partial<InsertDeployment>): Promise<Deployment | undefined> {
     const [deployment] = await db
       .update(deployments)
-      .set(updates)
+      .set(updates as any)
       .where(eq(deployments.id, id))
       .returning();
     return deployment || undefined;
@@ -149,7 +149,7 @@ export class DatabaseStorage implements IStorage {
   async createActivity(insertActivity: InsertActivity): Promise<Activity> {
     const [activity] = await db
       .insert(activities)
-      .values(insertActivity)
+      .values(insertActivity as any)
       .returning();
     return activity;
   }

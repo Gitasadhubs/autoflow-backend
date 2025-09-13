@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import pgSession from "connect-pg-simple";
 import passport from "passport";
 import cors from "cors";
 import helmet from "helmet";
@@ -45,7 +46,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Session configuration
+const PgSession = pgSession(session);
 app.use(session({
+  store: new PgSession({
+    conString: process.env.DATABASE_URL,
+    tableName: 'user_sessions'
+  }),
   secret: process.env.SESSION_SECRET || "your-secret-key",
   resave: false,
   saveUninitialized: false,
@@ -93,23 +99,38 @@ app.use((req, res, next) => {
 
 // Health check endpoint for Railway
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    database: process.env.DATABASE_URL ? "connected" : "not configured"
+  });
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  try {
+    console.log('🚀 Starting AutoFlow Backend...');
+    console.log('Environment:', process.env.NODE_ENV);
+    console.log('Database URL configured:', !!process.env.DATABASE_URL);
+    
+    const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    console.error(err);
-  });
+      res.status(status).json({ message });
+      console.error('❌ Error:', err);
+    });
 
-  // Use Railway's PORT environment variable or default to 3000
-  const port = parseInt(process.env.PORT || "3000", 10);
-  server.listen(port, "0.0.0.0", () => {
-    console.log(`Backend server running on port ${port}`);
-  });
+    // Use Railway's PORT environment variable or default to 3000
+    const port = parseInt(process.env.PORT || "3000", 10);
+    server.listen(port, "0.0.0.0", () => {
+      console.log(`✅ Backend server running on port ${port}`);
+      console.log(`🌐 Health check: http://localhost:${port}/api/health`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
 })();

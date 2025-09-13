@@ -82,6 +82,22 @@ try {
   `;
   console.log('✅ Created activities table');
   
+  // Create sessions table for connect-pg-simple
+  await sql`
+    CREATE TABLE IF NOT EXISTS "user_sessions" (
+      "sid" varchar NOT NULL COLLATE "default",
+      "sess" json NOT NULL,
+      "expire" timestamp(6) NOT NULL
+    );
+  `;
+  console.log('✅ Created user_sessions table');
+  
+  // Create index for sessions
+  await sql`
+    CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "user_sessions" ("expire");
+  `;
+  console.log('✅ Created session index');
+  
   console.log('🎉 All tables created successfully!');
   console.log('📊 Database is ready for AutoFlow backend!');
   

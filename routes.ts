@@ -142,8 +142,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/github/callback", 
     passport.authenticate("github", { failureRedirect: "/login" }),
     (req, res) => {
-      // Successful authentication, redirect to dashboard
-      res.redirect("/");
+      // Successful authentication, redirect to frontend dashboard
+      const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app";
+      res.redirect(`${frontendUrl}/dashboard`);
     }
   );
 
@@ -451,6 +452,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Root route - redirect to frontend
+  app.get("/", (req, res) => {
+    const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app";
+    res.redirect(frontendUrl);
   });
 
   // 404 handler for API routes

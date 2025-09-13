@@ -2,9 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import passport from "passport";
 import { Octokit } from "@octokit/rest";
-import { storage } from "./storage";
-import { requireAuth, getCurrentUser } from "./auth";
-import { insertUserSchema, insertProjectSchema, insertDeploymentSchema, type Project } from "./shared/schema";
+import { storage } from "./storage.js";
+import { requireAuth, getCurrentUser } from "./auth.js";
+import { insertUserSchema, insertProjectSchema, insertDeploymentSchema, type Project } from "./shared/schema.js";
 import { z } from "zod";
 
 // GitHub Actions workflow creation

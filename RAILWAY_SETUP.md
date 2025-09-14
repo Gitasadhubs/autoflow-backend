@@ -22,6 +22,7 @@ GITHUB_CLIENT_SECRET=your_github_client_secret
 NODE_ENV=production
 BACKEND_URL=https://your-railway-app.railway.app
 FRONTEND_URL=https://your-vercel-app.vercel.app
+WEBHOOK_URL=https://your-railway-app.railway.app/api/webhooks/github
 ```
 
 ### Session Security

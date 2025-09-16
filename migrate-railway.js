@@ -83,9 +83,10 @@ try {
   console.log('✅ Created activities table');
   
   // Create sessions table for connect-pg-simple
+  await sql`DROP TABLE IF EXISTS "user_sessions";`;
   await sql`
-    CREATE TABLE IF NOT EXISTS "user_sessions" (
-      "sid" varchar NOT NULL COLLATE "default",
+    CREATE TABLE "user_sessions" (
+      "sid" varchar PRIMARY KEY NOT NULL COLLATE "default",
       "sess" json NOT NULL,
       "expire" timestamp(6) NOT NULL
     );

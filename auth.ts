@@ -9,7 +9,7 @@ if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
 } else {
   const callbackURL = process.env.NODE_ENV === "production"
     ? `${process.env.BACKEND_URL || "https://autoflow-backend-production.up.railway.app"}/api/auth/github/callback`
-    : "http://localhost:3000/api/auth/github/callback";
+    : "http://localhost:8080/api/auth/github/callback";
 
   console.log('GitHub OAuth Callback URL:', callbackURL);
 

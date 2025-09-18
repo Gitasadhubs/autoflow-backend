@@ -62,7 +62,7 @@ async function triggerGitHubActionsWorkflow(accessToken: string, project: Projec
       deployment_id: deploymentId.toString(),
       webhook_url: process.env.NODE_ENV === "production"
         ? `${process.env.BACKEND_URL}/api/webhooks/github-push`
-        : `http://localhost:5000/api/webhooks/github-push`
+        : `http://localhost:8080/api/webhooks/github-push`
     }
   });
 }
@@ -216,11 +216,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     scope: ["user:email", "repo", "workflow"]
   }));
 
-  app.get("/api/auth/github/callback", 
+  app.get("/api/auth/github/callback",
     passport.authenticate("github", { failureRedirect: "/login" }),
     (req, res) => {
       // Successful authentication, redirect to frontend dashboard
-      const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app";
+      const frontendUrl = process.env.NODE_ENV === "production"
+        ? (process.env.FRONTEND_URL || "https://autoflow-frontend.vercel.app")
+        : "http://localhost:3000";
       res.redirect(`${frontendUrl}/dashboard`);
     }
   );
@@ -439,7 +441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Repository endpoints (GitHub integration)
-  app.get("/api/github/repositories", requireAuth, async (req, res) => {
+  app.get("/api/github/repos", requireAuth, async (req, res) => {
     try {
       const user = getCurrentUser(req);
       if (!user || !user.accessToken) {
@@ -628,7 +630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Root route - redirect to frontend
   app.get("/", (req, res) => {
-    const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend.vercel.app";
     res.redirect(frontendUrl);
   });
 

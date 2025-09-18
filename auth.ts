@@ -7,9 +7,9 @@ if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
   console.warn("GitHub OAuth credentials not found. Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables.");
   console.warn("Authentication will be disabled until credentials are provided.");
 } else {
-  const callbackURL = process.env.NODE_ENV === "production" 
+  const callbackURL = process.env.NODE_ENV === "production"
     ? `${process.env.BACKEND_URL || "https://autoflow-backend-production.up.railway.app"}/api/auth/github/callback`
-    : "http://localhost:5000/api/auth/github/callback";
+    : "http://localhost:8080/api/auth/github/callback";
 
   console.log('GitHub OAuth Callback URL:', callbackURL);
 

@@ -60,9 +60,9 @@ async function triggerGitHubActionsWorkflow(accessToken: string, project: Projec
     ref: project.branch,
     inputs: {
       deployment_id: deploymentId.toString(),
-      webhook_url: process.env.NODE_ENV === "production" 
-        ? `${process.env.BACKEND_URL}/api/webhooks/github`
-        : `http://localhost:5000/api/webhooks/github`
+      webhook_url: process.env.NODE_ENV === "production"
+        ? `${process.env.BACKEND_URL}/api/webhook/github`
+        : `http://localhost:5000/api/webhook/github`
     }
   });
 }

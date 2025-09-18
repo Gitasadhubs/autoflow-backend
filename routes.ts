@@ -221,7 +221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     (req, res) => {
       // Successful authentication, redirect to frontend dashboard
       const frontendUrl = process.env.NODE_ENV === "production"
-        ? (process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app")
+        ? (process.env.FRONTEND_URL || "https://autoflow-frontend.vercel.app")
         : "http://localhost:3000";
       res.redirect(`${frontendUrl}/dashboard`);
     }
@@ -630,7 +630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Root route - redirect to frontend
   app.get("/", (req, res) => {
-    const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend.vercel.app";
     res.redirect(frontendUrl);
   });
 

@@ -20,13 +20,13 @@ app.use(helmet({
 
 // CORS configuration - allow frontend domain
 app.use(cors({
-  origin: process.env.NODE_ENV === "production" 
+  origin: process.env.NODE_ENV === "production"
     ? [
         process.env.FRONTEND_URL || "https://autoflow-frontend.vercel.app",
         /\.vercel\.app$/,
         /\.railway\.app$/
       ]
-    : ["http://localhost:5000", "http://localhost:3000", "http://localhost:4173"],
+    : ["http://localhost:5000", "http://localhost:3000", "http://localhost:4173", "http://localhost:8080"],
   credentials: true,
 }));
 
@@ -126,8 +126,8 @@ app.get("/api/health", (req, res) => {
       console.error('❌ Error:', err);
     });
 
-    // Use Railway's PORT environment variable or default to 3000
-    const port = parseInt(process.env.PORT || "3000", 10);
+    // Use Railway's PORT environment variable or default to 8080
+    const port = parseInt(process.env.PORT || "8080", 10);
     server.listen(port, "0.0.0.0", () => {
       console.log(`✅ Backend server running on port ${port}`);
       console.log(`🌐 Health check: http://localhost:${port}/api/health`);

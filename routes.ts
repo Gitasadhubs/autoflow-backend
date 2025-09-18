@@ -60,9 +60,9 @@ async function triggerGitHubActionsWorkflow(accessToken: string, project: Projec
     ref: project.branch,
     inputs: {
       deployment_id: deploymentId.toString(),
-        webhook_url: process.env.NODE_ENV === "production"
-          ? `${process.env.BACKEND_URL}/api/webhooks/github-push`
-          : `http://localhost:3000/api/webhooks/github-push`
+      webhook_url: process.env.NODE_ENV === "production"
+        ? `${process.env.BACKEND_URL}/api/webhooks/github-push`
+        : `http://localhost:8080/api/webhooks/github-push`
     }
   });
 }
@@ -216,11 +216,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     scope: ["user:email", "repo", "workflow"]
   }));
 
-  app.get("/api/auth/github/callback", 
+  app.get("/api/auth/github/callback",
     passport.authenticate("github", { failureRedirect: "/login" }),
     (req, res) => {
       // Successful authentication, redirect to frontend dashboard
-      const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app";
+      const frontendUrl = process.env.NODE_ENV === "production"
+        ? (process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app")
+        : "http://localhost:3000";
       res.redirect(`${frontendUrl}/dashboard`);
     }
   );

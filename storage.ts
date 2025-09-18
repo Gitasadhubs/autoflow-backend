@@ -1,9 +1,9 @@
-import { 
-  users, 
-  projects, 
-  deployments, 
+import {
+  users,
+  projects,
+  deployments,
   activities,
-  type User, 
+  type User,
   type InsertUser,
   type Project,
   type InsertProject,
@@ -13,7 +13,7 @@ import {
   type InsertActivity
 } from "./shared/schema.js";
 import { db } from "./db.js";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -21,7 +21,7 @@ export interface IStorage {
   getUserByGithubId(githubId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined>;
-  
+
   // Project methods
   getProject(id: number): Promise<Project | undefined>;
   getProjectsByUserId(userId: number): Promise<Project[]>;
@@ -29,13 +29,14 @@ export interface IStorage {
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, updates: Partial<InsertProject>): Promise<Project | undefined>;
   deleteProject(id: number): Promise<boolean>;
-  
+
   // Deployment methods
   getDeployment(id: number): Promise<Deployment | undefined>;
   getDeploymentsByProjectId(projectId: number): Promise<Deployment[]>;
+  getDeploymentsByUserId(userId: number): Promise<Deployment[]>;
   createDeployment(deployment: InsertDeployment): Promise<Deployment>;
   updateDeployment(id: number, updates: Partial<InsertDeployment>): Promise<Deployment | undefined>;
-  
+
   // Activity methods
   getActivitiesByUserId(userId: number, limit?: number): Promise<Activity[]>;
   createActivity(activity: InsertActivity): Promise<Activity>;
@@ -125,6 +126,15 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(deployments)
       .where(eq(deployments.projectId, projectId))
+      .orderBy(desc(deployments.startedAt));
+  }
+
+  async getDeploymentsByUserId(userId: number): Promise<Deployment[]> {
+    return await db
+      .select()
+      .from(deployments)
+      .innerJoin(projects, eq(deployments.projectId, projects.id))
+      .where(eq(projects.userId, userId))
       .orderBy(desc(deployments.startedAt));
   }
 

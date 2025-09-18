@@ -345,6 +345,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // New endpoint to fetch all deployments for the authenticated user
+  app.get("/api/deployments", requireAuth, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const deployments = await storage.getDeploymentsByUserId(user.id);
+      res.json(deployments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch deployments" });
+    }
+  });
+
   app.post("/api/projects/:id/deploy", requireAuth, async (req, res) => {
     try {
       const projectId = parseInt(req.params.id);
@@ -527,7 +541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Webhook endpoint for GitHub push events
-  app.post("/api/webhook/github", async (req, res) => {
+  app.post("/api/webhooks/github-push", async (req, res) => {
     try {
       const signature = req.headers['x-hub-signature-256'] as string | undefined;
       const payload = JSON.stringify(req.body);

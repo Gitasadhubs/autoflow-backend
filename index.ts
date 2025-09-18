@@ -62,7 +62,10 @@ app.use(session({
   },
 }));
 
+import cookieParser from "cookie-parser";
+
 // Passport middleware
+app.use(cookieParser());
 app.use(passport.initialize());
 app.use(passport.session());
 

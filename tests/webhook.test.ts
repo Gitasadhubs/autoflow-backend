@@ -1,7 +1,7 @@
 import request from "supertest";
 import { createServer } from "http";
 import express from "express";
-import { registerRoutes } from "../autoflow-backend/routes.js";
+import { registerRoutes } from "../routes.js";
 
 let server: any;
 
@@ -14,7 +14,7 @@ beforeAll(async () => {
 describe("Webhook Endpoint Tests", () => {
   it("should return 400 for invalid payload", async () => {
     const res = await request(server)
-      .post("/api/webhook/github")
+      .post("/api/webhooks/github-push")
       .send({});
     expect(res.statusCode).toBe(400);
     expect(res.body.message).toBe("Invalid payload");
@@ -27,7 +27,7 @@ describe("Webhook Endpoint Tests", () => {
       head_commit: { id: "abc123", message: "Test commit" }
     };
     const res = await request(server)
-      .post("/api/webhook/github")
+      .post("/api/webhooks/github-push")
       .send(payload);
     expect(res.statusCode).toBe(404);
     expect(res.body.message).toBe("Project not found");

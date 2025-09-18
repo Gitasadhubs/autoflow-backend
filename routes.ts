@@ -61,8 +61,8 @@ async function triggerGitHubActionsWorkflow(accessToken: string, project: Projec
     inputs: {
       deployment_id: deploymentId.toString(),
       webhook_url: process.env.NODE_ENV === "production"
-        ? `${process.env.BACKEND_URL}/api/webhook/github`
-        : `http://localhost:5000/api/webhook/github`
+        ? `${process.env.BACKEND_URL}/api/webhooks/github-push`
+        : `http://localhost:5000/api/webhooks/github-push`
     }
   });
 }
@@ -497,7 +497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Webhook endpoint for GitHub
-  app.post("/api/webhook/github", async (req, res) => {
+  app.post("/api/webhooks/github-push", async (req, res) => {
     const signature = req.headers['x-hub-signature-256'] as string | undefined;
 
     if (signature) {
@@ -630,6 +630,205 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/", (req, res) => {
     const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app";
     res.redirect(frontendUrl);
+  });
+
+  // Additional routes for frontend compatibility
+  app.get("/repos", requireAuth, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user || !user.accessToken) {
+        return res.status(401).json({ message: "GitHub access token not found" });
+      }
+
+      const octokit = new Octokit({
+        auth: user.accessToken,
+      });
+
+      const { data: repositories } = await octokit.rest.repos.listForAuthenticatedUser({
+        sort: "updated",
+        per_page: 100,
+      });
+
+      const formattedRepos = repositories.map(repo => ({
+        id: repo.id,
+        name: repo.name,
+        full_name: repo.full_name,
+        description: repo.description || "",
+        private: repo.private,
+        html_url: repo.html_url,
+        language: repo.language || "Unknown",
+        default_branch: repo.default_branch,
+        updated_at: repo.updated_at,
+      }));
+
+      res.json(formattedRepos);
+    } catch (error) {
+      console.error("GitHub API error:", error);
+      res.status(500).json({ message: "Failed to fetch repositories from GitHub" });
+    }
+  });
+
+  app.post("/setup", requireAuth, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user || !user.accessToken) {
+        return res.status(401).json({ message: "GitHub access token not found" });
+      }
+
+      const { repo } = req.body;
+      if (!repo) {
+        return res.status(400).json({ message: "Repository name is required" });
+      }
+
+      // Parse repo name
+      const [owner, name] = repo.split('/');
+      const octokit = new Octokit({ auth: user.accessToken });
+
+      // Get repo details
+      const { data: repoData } = await octokit.rest.repos.get({ owner, repo: name });
+
+      const projectData = insertProjectSchema.parse({
+        name: repoData.name,
+        repositoryName: repoData.full_name,
+        branch: repoData.default_branch,
+        framework: repoData.language?.toLowerCase() === 'javascript' || repoData.language?.toLowerCase() === 'typescript' ? 'react' : 'node',
+        userId: user.id
+      });
+
+      const project = await storage.createProject(projectData);
+
+      // Create GitHub Actions workflow
+      try {
+        await createGitHubActionsWorkflow(user.accessToken, project);
+      } catch (workflowError) {
+        console.error("Failed to create GitHub Actions workflow:", workflowError);
+      }
+
+      // Create initial activity
+      await storage.createActivity({
+        userId: user.id,
+        projectId: project.id,
+        type: "project_created",
+        description: `Project "${project.name}" created`
+      });
+
+      res.status(201).json(project);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid project data", errors: error.errors });
+      }
+      console.error("Project setup error:", error);
+      res.status(500).json({ message: "Failed to setup project" });
+    }
+  });
+
+  app.post("/deploy", requireAuth, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user || !user.accessToken) {
+        return res.status(401).json({ message: "GitHub access token not found" });
+      }
+
+      const { repo } = req.body;
+      if (!repo) {
+        return res.status(400).json({ message: "Repository name is required" });
+      }
+
+      // Find project by repository name
+      const projects = await storage.getProjectsByUserId(user.id);
+      const project = projects.find(p => p.repositoryName === repo);
+
+      if (!project) {
+        return res.status(404).json({ message: "Project not found for this repository" });
+      }
+
+      // Create deployment record
+      const deployment = await storage.createDeployment({
+        projectId: project.id,
+        status: "building",
+        commitHash: "latest",
+        commitMessage: "Manual deployment"
+      });
+
+      // Update project status
+      await storage.updateProject(project.id, {
+        status: "building"
+      });
+
+      // Create activity
+      await storage.createActivity({
+        userId: user.id,
+        projectId: project.id,
+        type: "deployment_started",
+        description: `Deployment started for "${project.name}"`
+      });
+
+      // Trigger GitHub Actions workflow
+      try {
+        await triggerGitHubActionsWorkflow(user.accessToken, project, deployment.id);
+      } catch (workflowError) {
+        console.error("Failed to trigger GitHub Actions workflow:", workflowError);
+        await storage.updateDeployment(deployment.id, {
+          status: "failed",
+          buildLogs: `Failed to trigger deployment: ${workflowError.message}`
+        });
+
+        await storage.updateProject(project.id, {
+          status: "failed"
+        });
+
+        await storage.createActivity({
+          userId: user.id,
+          projectId: project.id,
+          type: "deployment_failed",
+          description: `Failed to trigger deployment for "${project.name}"`
+        });
+      }
+
+      res.status(201).json(deployment);
+    } catch (error) {
+      console.error("Deploy error:", error);
+      res.status(500).json({ message: "Failed to start deployment" });
+    }
+  });
+
+  app.get("/status", requireAuth, async (req, res) => {
+    try {
+      const user = getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const { repo } = req.query;
+      if (!repo || typeof repo !== 'string') {
+        return res.status(400).json({ message: "Repository name is required" });
+      }
+
+      // Find project by repository name
+      const projects = await storage.getProjectsByUserId(user.id);
+      const project = projects.find(p => p.repositoryName === repo);
+
+      if (!project) {
+        return res.status(404).json({ message: "Project not found for this repository" });
+      }
+
+      // Get latest deployment
+      const deployments = await storage.getDeploymentsByProjectId(project.id);
+      const latestDeployment = deployments.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())[0];
+
+      if (!latestDeployment) {
+        return res.json({ logs: "No deployments found." });
+      }
+
+      res.json({
+        logs: latestDeployment.buildLogs || "No logs available.",
+        status: latestDeployment.status,
+        deploymentUrl: latestDeployment.deploymentUrl
+      });
+    } catch (error) {
+      console.error("Status error:", error);
+      res.status(500).json({ message: "Failed to fetch status" });
+    }
   });
 
   // 404 handler for API routes

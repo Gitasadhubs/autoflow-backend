@@ -496,130 +496,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Webhook endpoint for GitHub Actions
-  app.post("/api/webhooks/github", async (req, res) => {
-    try {
-      const { deployment_id, status, logs, deployment_url } = req.body;
-      
-      if (!deployment_id) {
-        return res.status(400).json({ message: "deployment_id is required" });
-      }
+  // Webhook endpoint for GitHub
+  app.post("/api/webhook/github", async (req, res) => {
+    const signature = req.headers['x-hub-signature-256'] as string | undefined;
 
-      // Update deployment status
-      const deployment = await storage.updateDeployment(parseInt(deployment_id), {
-        status,
-        buildLogs: logs,
-        deploymentUrl: deployment_url
-      });
+    if (signature) {
+      // Handle GitHub push webhook
+      try {
+        const payload = JSON.stringify(req.body);
+        const secret = process.env.GITHUB_WEBHOOK_SECRET;
 
-      if (!deployment) {
-        return res.status(404).json({ message: "Deployment not found" });
-      }
+        if (!secret) {
+          console.error("GitHub webhook secret not set");
+          return res.status(500).json({ message: "Server misconfiguration" });
+        }
 
-      // Update project status
-      const project = await storage.getProject(deployment.projectId);
-      if (project) {
-        await storage.updateProject(deployment.projectId, {
-          status: status === "success" ? "deployed" : status,
-          deploymentUrl: status === "success" ? deployment_url : undefined
+        const hmac = crypto.createHmac('sha256', secret);
+        const digest = 'sha256=' + hmac.update(payload).digest('hex');
+
+        if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))) {
+          return res.status(401).json({ message: "Invalid signature" });
+        }
+
+        const event = req.headers['x-github-event'];
+        if (event !== 'push') {
+          return res.status(400).json({ message: "Unsupported event type" });
+        }
+
+        const { repository, ref, head_commit } = req.body;
+        if (!repository || !ref || !head_commit) {
+          return res.status(400).json({ message: "Invalid payload" });
+        }
+
+        const repoFullName = repository.full_name;
+        const branch = ref.replace('refs/heads/', '');
+        const commitHash = head_commit.id;
+        const commitMessage = head_commit.message;
+
+        // Find project by repository name and branch
+        const projects = await storage.getProjectsByRepositoryName(repoFullName);
+        const project = projects.find(p => p.branch === branch);
+
+        if (!project) {
+          return res.status(404).json({ message: "Project not found" });
+        }
+
+        // Create deployment record
+        const deployment = await storage.createDeployment({
+          projectId: project.id,
+          status: "building",
+          commitHash,
+          commitMessage
+        });
+
+        // Update project status
+        await storage.updateProject(project.id, {
+          status: "building"
         });
 
         // Create activity
         await storage.createActivity({
           userId: project.userId,
-          projectId: deployment.projectId,
-          type: status === "success" ? "deployment_success" : "deployment_failed",
-          description: `Deployment ${status === "success" ? "completed successfully" : "failed"} for "${project.name}"`
+          projectId: project.id,
+          type: "deployment_started",
+          description: `Deployment started for "${project.name}" via webhook`
         });
+
+        // Trigger deployment via Vercel or Railway API
+        if (project.framework.toLowerCase() === "react") {
+          // Trigger Vercel deployment
+          await triggerVercelDeployment(project);
+        } else {
+          // Trigger Railway deployment
+          await triggerRailwayDeployment(project);
+        }
+
+        res.status(201).json({ message: "Deployment triggered", deploymentId: deployment.id });
+      } catch (error) {
+        console.error("GitHub push webhook error:", error);
+        res.status(500).json({ message: "Failed to process GitHub push webhook" });
       }
+    } else {
+      // Handle GitHub Actions status webhook
+      try {
+        const { deployment_id, status, logs, deployment_url } = req.body;
 
-      res.json({ message: "Webhook processed successfully" });
-    } catch (error) {
-      console.error("Webhook error:", error);
-      res.status(500).json({ message: "Failed to process webhook" });
-    }
-  });
+        if (!deployment_id) {
+          return res.status(400).json({ message: "deployment_id is required" });
+        }
 
-  // Webhook endpoint for GitHub push events
-  app.post("/api/webhooks/github-push", async (req, res) => {
-    try {
-      const signature = req.headers['x-hub-signature-256'] as string | undefined;
-      const payload = JSON.stringify(req.body);
-      const secret = process.env.GITHUB_WEBHOOK_SECRET;
+        // Update deployment status
+        const deployment = await storage.updateDeployment(parseInt(deployment_id), {
+          status,
+          buildLogs: logs,
+          deploymentUrl: deployment_url
+        });
 
-      if (!secret) {
-        console.error("GitHub webhook secret not set");
-        return res.status(500).json({ message: "Server misconfiguration" });
+        if (!deployment) {
+          return res.status(404).json({ message: "Deployment not found" });
+        }
+
+        // Update project status
+        const project = await storage.getProject(deployment.projectId);
+        if (project) {
+          await storage.updateProject(deployment.projectId, {
+            status: status === "success" ? "deployed" : status,
+            deploymentUrl: status === "success" ? deployment_url : undefined
+          });
+
+          // Create activity
+          await storage.createActivity({
+            userId: project.userId,
+            projectId: deployment.projectId,
+            type: status === "success" ? "deployment_success" : "deployment_failed",
+            description: `Deployment ${status === "success" ? "completed successfully" : "failed"} for "${project.name}"`
+          });
+        }
+
+        res.json({ message: "Webhook processed successfully" });
+      } catch (error) {
+        console.error("Webhook error:", error);
+        res.status(500).json({ message: "Failed to process webhook" });
       }
-
-      if (!signature) {
-        return res.status(400).json({ message: "Missing signature" });
-      }
-
-      const hmac = crypto.createHmac('sha256', secret);
-      const digest = 'sha256=' + hmac.update(payload).digest('hex');
-
-      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))) {
-        return res.status(401).json({ message: "Invalid signature" });
-      }
-
-      const event = req.headers['x-github-event'];
-      if (event !== 'push') {
-        return res.status(400).json({ message: "Unsupported event type" });
-      }
-
-      const { repository, ref, head_commit } = req.body;
-      if (!repository || !ref || !head_commit) {
-        return res.status(400).json({ message: "Invalid payload" });
-      }
-
-      const repoFullName = repository.full_name;
-      const branch = ref.replace('refs/heads/', '');
-      const commitHash = head_commit.id;
-      const commitMessage = head_commit.message;
-
-      // Find project by repository name and branch
-      const projects = await storage.getProjectsByRepositoryName(repoFullName);
-      const project = projects.find(p => p.branch === branch);
-
-      if (!project) {
-        return res.status(404).json({ message: "Project not found" });
-      }
-
-      // Create deployment record
-      const deployment = await storage.createDeployment({
-        projectId: project.id,
-        status: "building",
-        commitHash,
-        commitMessage
-      });
-
-      // Update project status
-      await storage.updateProject(project.id, {
-        status: "building"
-      });
-
-      // Create activity
-      await storage.createActivity({
-        userId: project.userId,
-        projectId: project.id,
-        type: "deployment_started",
-        description: `Deployment started for "${project.name}" via webhook`
-      });
-
-      // Trigger deployment via Vercel or Railway API
-      if (project.framework.toLowerCase() === "react") {
-        // Trigger Vercel deployment
-        await triggerVercelDeployment(project);
-      } else {
-        // Trigger Railway deployment
-        await triggerRailwayDeployment(project);
-      }
-
-      res.status(201).json({ message: "Deployment triggered", deploymentId: deployment.id });
-    } catch (error) {
-      console.error("GitHub push webhook error:", error);
-      res.status(500).json({ message: "Failed to process GitHub push webhook" });
     }
   });
 

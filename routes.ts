@@ -60,9 +60,9 @@ async function triggerGitHubActionsWorkflow(accessToken: string, project: Projec
     ref: project.branch,
     inputs: {
       deployment_id: deploymentId.toString(),
-      webhook_url: process.env.NODE_ENV === "production"
-        ? `${process.env.BACKEND_URL}/api/webhooks/github-push`
-        : `http://localhost:5000/api/webhooks/github-push`
+        webhook_url: process.env.NODE_ENV === "production"
+          ? `${process.env.BACKEND_URL}/api/webhooks/github-push`
+          : `http://localhost:3000/api/webhooks/github-push`
     }
   });
 }
@@ -439,7 +439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Repository endpoints (GitHub integration)
-  app.get("/api/github/repositories", requireAuth, async (req, res) => {
+  app.get("/api/github/repos", requireAuth, async (req, res) => {
     try {
       const user = getCurrentUser(req);
       if (!user || !user.accessToken) {

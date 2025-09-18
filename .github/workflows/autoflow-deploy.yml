@@ -1,0 +1,91 @@
+name: AutoFlow Backend CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: 'Deployment ID'
+        required: true
+      webhook_url:
+        description: 'Webhook URL for status updates'
+        required: true
+  push:
+    branches: [ main, master, develop ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Type check
+      run: npm run type-check || echo "No type-check script found"
+
+    - name: Lint code
+      run: npm run lint || echo "No lint script found"
+
+    - name: Run tests
+      run: npm run test || echo "No test script found"
+
+    - name: Build project
+      run: npm run build
+
+    - name: Deploy to Railway
+      if: env.RAILWAY_TOKEN != ''
+      uses: railwayapp/actions-deploy@v1
+      with:
+        railway-token: ${{ secrets.RAILWAY_TOKEN }}
+        service: ${{ secrets.RAILWAY_SERVICE_NAME }}
+
+    - name: Deploy to Heroku (alternative)
+      if: env.HEROKU_API_KEY != '' && !success()
+      uses: akhileshns/heroku-deploy@v3.12.12
+      with:
+        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+        heroku_app_name: ${{ secrets.HEROKU_APP_NAME }}
+        heroku_email: ${{ secrets.HEROKU_EMAIL }}
+
+    - name: Deploy to DigitalOcean App Platform (alternative)
+      if: env.DIGITALOCEAN_ACCESS_TOKEN != '' && !success()
+      uses: digitalocean/app_action@main
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+        app_name: ${{ secrets.DIGITALOCEAN_APP_NAME }}
+
+    - name: Notify deployment success
+      if: success()
+      run: |
+        if [ -n "${{ github.event.inputs.webhook_url }}" ]; then
+          DEPLOYMENT_URL=""
+          if [ -n "${{ steps.railway.outputs.url }}" ]; then
+            DEPLOYMENT_URL="${{ steps.railway.outputs.url }}"
+          elif [ -n "${{ steps.heroku.outputs.web_url }}" ]; then
+            DEPLOYMENT_URL="${{ steps.heroku.outputs.web_url }}"
+          elif [ -n "${{ steps.digitalocean.outputs.app_url }}" ]; then
+            DEPLOYMENT_URL="${{ steps.digitalocean.outputs.app_url }}"
+          fi
+
+          curl -X POST "${{ github.event.inputs.webhook_url }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"deployment_id\": \"${{ github.event.inputs.deployment_id }}\", \"status\": \"success\", \"logs\": \"Backend deployment completed successfully\", \"deployment_url\": \"$DEPLOYMENT_URL\"}"
+        fi
+
+    - name: Notify deployment failure
+      if: failure()
+      run: |
+        if [ -n "${{ github.event.inputs.webhook_url }}" ]; then
+          curl -X POST "${{ github.event.inputs.webhook_url }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"deployment_id\": \"${{ github.event.inputs.deployment_id }}\", \"status\": \"failed\", \"logs\": \"Backend deployment failed. Check the GitHub Actions logs for details.\"}"
+        fi

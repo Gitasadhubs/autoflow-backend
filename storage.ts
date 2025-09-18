@@ -25,6 +25,7 @@ export interface IStorage {
   // Project methods
   getProject(id: number): Promise<Project | undefined>;
   getProjectsByUserId(userId: number): Promise<Project[]>;
+  getProjectsByRepositoryName(repositoryName: string): Promise<Project[]>;
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, updates: Partial<InsertProject>): Promise<Project | undefined>;
   deleteProject(id: number): Promise<boolean>;
@@ -80,6 +81,14 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(projects)
       .where(eq(projects.userId, userId))
+      .orderBy(desc(projects.createdAt));
+  }
+
+  async getProjectsByRepositoryName(repositoryName: string): Promise<Project[]> {
+    return await db
+      .select()
+      .from(projects)
+      .where(eq(projects.repositoryName, repositoryName))
       .orderBy(desc(projects.createdAt));
   }
 

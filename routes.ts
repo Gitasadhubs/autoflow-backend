@@ -6,6 +6,7 @@ import { storage } from "./storage.js";
 import { requireAuth, getCurrentUser } from "./auth.js";
 import { insertUserSchema, insertProjectSchema, insertDeploymentSchema, type Project } from "./shared/schema.js";
 import { z } from "zod";
+import crypto from "crypto";
 
 // GitHub Actions workflow creation
 async function createGitHubActionsWorkflow(accessToken: string, project: Project) {
@@ -123,6 +124,82 @@ jobs:
         curl -X POST "\${{ github.event.inputs.webhook_url }}" \\
           -H "Content-Type: application/json" \\
           -d '{"deployment_id": "\${{ github.event.inputs.deployment_id }}", "status": "failed", "logs": "Deployment failed. Check the logs for details."}'`;
+}
+
+// Trigger Vercel deployment
+async function triggerVercelDeployment(project: Project) {
+  const vercelToken = process.env.VERCEL_TOKEN;
+  const vercelOrgId = process.env.VERCEL_ORG_ID;
+  const vercelProjectId = process.env.VERCEL_PROJECT_ID;
+
+  if (!vercelToken || !vercelOrgId || !vercelProjectId) {
+    throw new Error("Vercel environment variables not set");
+  }
+
+  const response = await fetch(`https://api.vercel.com/v13/deployments`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${vercelToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: project.name,
+      gitSource: {
+        type: 'github',
+        repo: project.repositoryName,
+        ref: project.branch,
+      },
+      projectSettings: {
+        framework: project.framework.toLowerCase(),
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Vercel deployment failed: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data;
+}
+
+// Trigger Railway deployment
+async function triggerRailwayDeployment(project: Project) {
+  const railwayToken = process.env.RAILWAY_TOKEN;
+  const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
+  const railwayServiceId = process.env.RAILWAY_SERVICE_ID;
+
+  if (!railwayToken || !railwayProjectId || !railwayServiceId) {
+    throw new Error("Railway environment variables not set");
+  }
+
+  const response = await fetch(`https://backboard.railway.app/graphql/v2`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${railwayToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: `
+        mutation deploy {
+          deploy(input: {
+            projectId: "${railwayProjectId}",
+            serviceId: "${railwayServiceId}"
+          }) {
+            id
+            status
+          }
+        }
+      `,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Railway deployment failed: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -446,6 +523,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Webhook error:", error);
       res.status(500).json({ message: "Failed to process webhook" });
+    }
+  });
+
+  // Webhook endpoint for GitHub push events
+  app.post("/api/webhook/github", async (req, res) => {
+    try {
+      const signature = req.headers['x-hub-signature-256'] as string | undefined;
+      const payload = JSON.stringify(req.body);
+      const secret = process.env.GITHUB_WEBHOOK_SECRET;
+
+      if (!secret) {
+        console.error("GitHub webhook secret not set");
+        return res.status(500).json({ message: "Server misconfiguration" });
+      }
+
+      if (!signature) {
+        return res.status(400).json({ message: "Missing signature" });
+      }
+
+      const hmac = crypto.createHmac('sha256', secret);
+      const digest = 'sha256=' + hmac.update(payload).digest('hex');
+
+      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))) {
+        return res.status(401).json({ message: "Invalid signature" });
+      }
+
+      const event = req.headers['x-github-event'];
+      if (event !== 'push') {
+        return res.status(400).json({ message: "Unsupported event type" });
+      }
+
+      const { repository, ref, head_commit } = req.body;
+      if (!repository || !ref || !head_commit) {
+        return res.status(400).json({ message: "Invalid payload" });
+      }
+
+      const repoFullName = repository.full_name;
+      const branch = ref.replace('refs/heads/', '');
+      const commitHash = head_commit.id;
+      const commitMessage = head_commit.message;
+
+      // Find project by repository name and branch
+      const projects = await storage.getProjectsByRepositoryName(repoFullName);
+      const project = projects.find(p => p.branch === branch);
+
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      // Create deployment record
+      const deployment = await storage.createDeployment({
+        projectId: project.id,
+        status: "building",
+        commitHash,
+        commitMessage
+      });
+
+      // Update project status
+      await storage.updateProject(project.id, {
+        status: "building"
+      });
+
+      // Create activity
+      await storage.createActivity({
+        userId: project.userId,
+        projectId: project.id,
+        type: "deployment_started",
+        description: `Deployment started for "${project.name}" via webhook`
+      });
+
+      // Trigger deployment via Vercel or Railway API
+      if (project.framework.toLowerCase() === "react") {
+        // Trigger Vercel deployment
+        await triggerVercelDeployment(project);
+      } else {
+        // Trigger Railway deployment
+        await triggerRailwayDeployment(project);
+      }
+
+      res.status(201).json({ message: "Deployment triggered", deploymentId: deployment.id });
+    } catch (error) {
+      console.error("GitHub push webhook error:", error);
+      res.status(500).json({ message: "Failed to process GitHub push webhook" });
     }
   });
 

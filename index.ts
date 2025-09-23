@@ -126,8 +126,8 @@ app.get("/api/health", (req, res) => {
       console.error('❌ Error:', err);
     });
 
-    // Use Railway's PORT environment variable or default to 8080
-    const port = parseInt(process.env.PORT || "8080", 10);
+    // Use Railway's PORT environment variable or default to 5000
+    const port = parseInt(process.env.PORT || "5000", 10);
     server.listen(port, "0.0.0.0", () => {
       console.log(`✅ Backend server running on port ${port}`);
       console.log(`🌐 Health check: http://localhost:${port}/api/health`);

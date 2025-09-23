@@ -19,14 +19,26 @@ app.use(helmet({
 }));
 
 // CORS configuration - allow frontend domain
+const frontendUrl = process.env.FRONTEND_URL || "https://autoflow-frontend-rho.vercel.app";
+const normalizedFrontendUrl = frontendUrl.startsWith('http') ? frontendUrl : `https://${frontendUrl}`;
+
 app.use(cors({
   origin: process.env.NODE_ENV === "production"
     ? [
-        process.env.FRONTEND_URL || "https://autoflow-frontend.vercel.app",
+        normalizedFrontendUrl,
+        "https://autoflow-frontend-rho.vercel.app",
         /\.vercel\.app$/,
-        /\.railway\.app$/
+        /\.railway\.app$/,
+        /\.replit\.dev$/,
+        /\.replit\.app$/
       ]
-    : ["http://localhost:5000", "http://localhost:3000", "http://localhost:4173", "http://localhost:8080"],
+    : [
+        "http://localhost:5000", 
+        "http://localhost:3000", 
+        "http://localhost:4173", 
+        "http://localhost:8080",
+        normalizedFrontendUrl
+      ],
   credentials: true,
 }));
 
